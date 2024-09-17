@@ -5,11 +5,11 @@ __kernel void convolution2D(
     //@@ Insert code to implement matrix multiplication here
 
     /* channel index is 0 for R, 1 for G, and 2 for B */
-
     int maskRadius = maskWidth/2;
     int xIndex = get_global_id(0); //i in pseudo
     int yIndex = get_global_id(1);  //j in pseudo
     float accum, imagePixel, maskValue;
+
 
     if(xIndex < height && yIndex < width){
         for(int k = 0; k < imageChannels; k++){

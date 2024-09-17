@@ -1,11 +1,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h> 
+#include <arm_neon.h>
 
 #include "device.h"
 #include "kernel.h"
 #include "matrix.h"
 #include "img.h"
+
+
 
 #define CHECK_ERR(err, msg)                           \
     if (err != CL_SUCCESS)                            \
@@ -14,7 +17,7 @@
         exit(EXIT_FAILURE);                           \
     }
 
-#define KERNEL_PATH "kernel.cl"
+/* #define KERNEL_PATH "kernel.cl"
 
 void OpenCLConvolution2D(Matrix *input0, Matrix *input1, Matrix *result)
 {
@@ -119,7 +122,56 @@ void OpenCLConvolution2D(Matrix *input0, Matrix *input1, Matrix *result)
     clReleaseKernel(kernel);
     clReleaseCommandQueue(queue);
     clReleaseContext(context);
+}*/
+
+float clamp(float x, float lower, float upper){
+    if (x > lower){
+        if ( x < upper) return x;
+        else return upper;
+    }
+    else if ( lower > x){
+        if (lower > upper) return lower;
+        else return upper;
+    }
+    return 0;
 }
+
+void Neon2DConvolution(Matrix *input0, Matrix *input1, Matrix *result)
+{
+    int imageChannels = IMAGE_CHANNELS;
+    int maskWidth = input1->shape[0];
+    int maskRadius = maskWidth/2;
+    int width = input0->shape[1];
+    int height = input0->shape[0];
+    
+    float accum, imagePixel, maskValue;
+
+
+    for(int xIndex = 0; xIndex < height; xIndex++){
+        for(int yIndex = 0; yIndex < width; yIndex++ ){
+            for(int k = 0; k < imageChannels; k++){
+                accum = 0;
+                for(int y = -maskRadius; y <= maskRadius; y++){
+                    for (int x = -maskRadius; x <= maskRadius; x++){
+                        int xOffset = yIndex + x;
+                        int yOffset = xIndex + y;
+                        if (xOffset >= 0 && xOffset < width && yOffset >= 0 && yOffset < height){
+                            imagePixel = input0->data[(yOffset * width + xOffset) * imageChannels + k];
+                            maskValue = input1->data[(y+maskRadius)*maskWidth+x+maskRadius];
+                            accum += imagePixel * maskValue;
+                        }
+                    } 
+                }
+                // pixels are in the range of 0 to 1
+                result->data[(xIndex * width + yIndex)*imageChannels + k] = clamp(accum, 0.0f, 1.0f);
+            } 
+        
+        }
+        
+     }
+
+}
+
 
 int main(int argc, char *argv[])
 {
@@ -159,7 +211,8 @@ int main(int argc, char *argv[])
     host_c.shape[1] = cols;
     host_c.data = (float *)malloc(sizeof(float) * host_c.shape[0] * host_c.shape[1] * IMAGE_CHANNELS);
 
-    OpenCLConvolution2D(&host_a, &host_b, &host_c);
+    //Call Neon 2D Convolution
+    Neon2DConvolution(&host_a, &host_b, &host_c);
 
     // Save the image
     SaveImg(input_file_d, &host_c);
