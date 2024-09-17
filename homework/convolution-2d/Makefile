@@ -1,5 +1,5 @@
 CC       = gcc
-CFLAGS   = -g -Wall
+CFLAGS   = -g -Wall -O1 -ftree-vectorize
 INCFLAGS := -I../../helper_lib
 LDFLAGS  := ../../helper_lib/helper_lib.a -lm
 
