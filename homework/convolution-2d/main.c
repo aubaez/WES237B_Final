@@ -37,22 +37,37 @@ void Neon2DConvolution(Matrix *input0, Matrix *input1, Matrix *result)
     int width = input0->shape[1];
     int height = input0->shape[0];
 
-    float accum, imagePixel, maskValue;
-
+   float accum, imagePixel, maskValue;
 
     for(int xIndex = 0; xIndex < height; xIndex++){
         for(int yIndex = 0; yIndex < width; yIndex++ ){
             for(int k = 0; k < imageChannels; k++){
                 accum = 0;
                 for(int y = -maskRadius; y <= maskRadius; y++){
-                    for (int x = -maskRadius; x <= maskRadius; x++){
+                    for (int x = -maskRadius; x + 2 <= maskRadius; x+= 2){
+                        
                         int xOffset = yIndex + x;
                         int yOffset = xIndex + y;
+                        // loop unrolling 
                         if (xOffset >= 0 && xOffset < width && yOffset >= 0 && yOffset < height){
                             imagePixel = input0->data[(yOffset * width + xOffset) * imageChannels + k];
                             maskValue = input1->data[(y+maskRadius)*maskWidth+x+maskRadius];
                             accum += imagePixel * maskValue;
                         }
+                        if (xOffset + 1 >= 0 && xOffset + 1 < width && yOffset >= 0 && yOffset < height){
+                            imagePixel = input0->data[(yOffset * width + xOffset + 1) * imageChannels + k];
+                            maskValue = input1->data[(y+maskRadius)*maskWidth+x+1+maskRadius];
+                            accum += imagePixel * maskValue;
+                        }
+                        if (x + 2 == maskRadius){
+                            if (xOffset + 2 >= 0 && xOffset + 2 < width && yOffset >= 0 && yOffset < height){
+                            imagePixel = input0->data[(yOffset * width + xOffset + 2) * imageChannels + k];
+                            maskValue = input1->data[(y+maskRadius)*maskWidth+x+2+maskRadius];
+                            accum += imagePixel * maskValue;
+                        }
+
+                        }
+
                     } 
                 }
                 // pixels are in the range of 0 to 1
