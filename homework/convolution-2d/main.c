@@ -17,6 +17,7 @@
         exit(EXIT_FAILURE);                           \
     }
 
+//define clamp function
 float clamp(float x, float lower, float upper){
     if (x > lower){
         if ( x < upper) return x;
@@ -28,7 +29,7 @@ float clamp(float x, float lower, float upper){
     }
     return 0;
 }
-
+// define neon version of 2D convolution
 void Neon2DConvolution(Matrix *input0, Matrix *input1, Matrix *result)
 {
     int imageChannels = IMAGE_CHANNELS;
@@ -37,39 +38,59 @@ void Neon2DConvolution(Matrix *input0, Matrix *input1, Matrix *result)
     int width = input0->shape[1];
     int height = input0->shape[0];
 
-   float accum, imagePixel, maskValue;
+   float32_t accum, imagePixel, maskValue;
+   float32x4_t product= {0,0,0,0}; //quadword
+
 
     for(int xIndex = 0; xIndex < height; xIndex++){
         for(int yIndex = 0; yIndex < width; yIndex++ ){
             for(int k = 0; k < imageChannels; k++){
                 accum = 0;
+                
                 for(int y = -maskRadius; y <= maskRadius; y++){
                     for (int x = -maskRadius; x + 2 <= maskRadius; x+= 2){
                         
                         int xOffset = yIndex + x;
                         int yOffset = xIndex + y;
-                        // loop unrolling 
+
+                        // Peform loop unrolling by incrementing by 2
                         if (xOffset >= 0 && xOffset < width && yOffset >= 0 && yOffset < height){
                             imagePixel = input0->data[(yOffset * width + xOffset) * imageChannels + k];
                             maskValue = input1->data[(y+maskRadius)*maskWidth+x+maskRadius];
-                            accum += imagePixel * maskValue;
+                            // accum += imagePixel*maskValue;
+                            // neon multiply values and add to quadword
+                            product[0] = vmulxs_f32(imagePixel,maskValue);
+
                         }
                         if (xOffset + 1 >= 0 && xOffset + 1 < width && yOffset >= 0 && yOffset < height){
                             imagePixel = input0->data[(yOffset * width + xOffset + 1) * imageChannels + k];
                             maskValue = input1->data[(y+maskRadius)*maskWidth+x+1+maskRadius];
-                            accum += imagePixel * maskValue;
+                            // accum += imagePixel*maskValue;
+                            // neon multiply values and add to quadword
+                            product[1] = vmulxs_f32(imagePixel,maskValue);
+
                         }
                         if (x + 2 == maskRadius){
                             if (xOffset + 2 >= 0 && xOffset + 2 < width && yOffset >= 0 && yOffset < height){
-                            imagePixel = input0->data[(yOffset * width + xOffset + 2) * imageChannels + k];
-                            maskValue = input1->data[(y+maskRadius)*maskWidth+x+2+maskRadius];
-                            accum += imagePixel * maskValue;
-                        }
+                                imagePixel = input0->data[(yOffset * width + xOffset + 2) * imageChannels + k];
+                                maskValue = input1->data[(y+maskRadius)*maskWidth+x+2+maskRadius];
+                                //accum += imagePixel*maskValue;
+                                //neon multiply values and add to quadword
+                                product[2] = vmulxs_f32(imagePixel,maskValue);
+
+                            }
 
                         }
-
+                        //add all values in quadword and add result to accumulator
+                        accum += vaddvq_f32(product);
+                        // clear product values
+                        product[0] = 0;
+                        product[1] = 0;
+                        product[2] = 0;
                     } 
+                    
                 }
+
                 // pixels are in the range of 0 to 1
                 result->data[(xIndex * width + yIndex)*imageChannels + k] = clamp(accum, 0.0f, 1.0f);
             } 
